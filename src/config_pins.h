@@ -4,14 +4,14 @@
 #include <zephyr/drivers/gpio.h>    /* for GPIO api*/
 #include <zephyr/sys/printk.h>      /* for printk()*/
 
-#include "config_pins.h"
+#ifndef CONFIG_PINS_H
+#define CONFIG_PINS_H
 
+#include <stdint.h>
 
+extern const uint8_t buttons_pins[];
+extern const uint8_t led_pins[];
 
+int config_pins();
 
-void main(void)
-{   
-    config_pins();
-
-}
-
+#endif
