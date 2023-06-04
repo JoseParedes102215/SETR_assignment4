@@ -23,7 +23,7 @@
 @details O Nodo representa a informação de um elemento do fifo
 */
 typedef struct node{
-char value[32]; /**< array de carateres armazenado no nodo */
+char value[8]; /**< array de carateres armazenado no nodo */
 int priority; /**< Valor da prioridade do elemento */
 struct node *next; /**< Ponteiro para o próximo nodo */
 } node;

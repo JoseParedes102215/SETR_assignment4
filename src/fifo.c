@@ -132,7 +132,7 @@ void printMyFifo(queue *q){
 char* MyFifoPeep(queue *q){
     if(MyFifoSize(q) == 0){
         //return QUEUE_EMPTY;
-        return;
+        return NULL;
     }
     else {
         return q->head->value; //retorna o elemento mais antigo
