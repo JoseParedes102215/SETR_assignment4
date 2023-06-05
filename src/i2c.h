@@ -22,7 +22,7 @@ static const struct i2c_dt_spec dev_i2c = I2C_DT_SPEC_GET(I2C0_NODE);
 
 
 
-void config_i2c();
+int get_temp();
 
 
 

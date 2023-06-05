@@ -23,6 +23,7 @@ void MyFifoInit(queue *q, int maxsize){
     q->head = NULL;
     q->tail = NULL;
     q->size = 0;
+    
 }
 
 int MyFifoSize(queue *q){

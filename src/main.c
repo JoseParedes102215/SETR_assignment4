@@ -9,6 +9,7 @@
 #include "config_pins.h"
 #include "fifo.h"
 #include "i2c.h"
+#include "fifo_RTDB.h"
 
 #include <zephyr/drivers/i2c.h>
 
@@ -72,29 +73,42 @@ void init_uart() {
 #define thread_B_prio 1
 #define thread_C_prio 1
 #define thread_D_prio 1
+#define thread_E_prio 1
 
 #define thread_A_period 1000
 #define thread_B_period 2000
 #define thread_C_period 3000
 #define thread_D_period 3000
+#define thread_E_period 500
 
 K_THREAD_STACK_DEFINE(thread_A_stack, STACK_SIZE);
 K_THREAD_STACK_DEFINE(thread_B_stack, STACK_SIZE);
 K_THREAD_STACK_DEFINE(thread_C_stack, STACK_SIZE);
 K_THREAD_STACK_DEFINE(thread_D_stack, STACK_SIZE);
+K_THREAD_STACK_DEFINE(thread_E_stack, STACK_SIZE);
 
 struct k_thread thread_A_data;
 struct k_thread thread_B_data;
 struct k_thread thread_C_data;
 struct k_thread thread_D_data;
+struct k_thread thread_E_data;
 
 k_tid_t thread_A_tid;
 k_tid_t thread_B_tid;
 k_tid_t thread_C_tid;
 k_tid_t thread_D_tid;
+k_tid_t thread_E_tid;
 
 queue q1;
 
+RTDB RT= {
+    //value ={0} ;/**< array de carateres armazenado no nodo */
+    //state_led[4]={0};
+    //tate_botao[4]={0};
+    //temp_i2c = 0;
+};
+
+// Thread A, comandos leitura comandos da uart
 void thread_A_code(void *arg1, void *arg2, void *arg3) {
     int64_t fin_time = 0, release_time = 0;
     timing_t start_time, end_time;
@@ -126,6 +140,7 @@ void thread_A_code(void *arg1, void *arg2, void *arg3) {
     timing_stop();
 }
 
+// thread que lê os valores do sensor de temperatura e atualiza a RTBD
 void thread_B_code(void *arg1, void *arg2, void *arg3) {
     int64_t fin_time = 0, release_time = 0;
     timing_t start_time, end_time;
@@ -136,8 +151,11 @@ void thread_B_code(void *arg1, void *arg2, void *arg3) {
 
     while (1) {
         start_time = timing_counter_get();
-        config_i2c();
-        // Alterar a RTBD
+        int t = get_temp();
+        // dar lock aqui
+        setRTDB_temp(&RT,t);
+        // unlock aqui
+        printk("temp=%d\n",t);
         fin_time = k_uptime_get();
         if (fin_time < release_time) {
             k_msleep(release_time - fin_time);
@@ -148,8 +166,10 @@ void thread_B_code(void *arg1, void *arg2, void *arg3) {
     timing_stop();
     }
 
+// thread que lê os valores dos botõers e atualiza a RTBD
 void thread_C_code(void *arg1, void *arg2, void *arg3) {
     int button1,button2,button3,button4;
+    int button_val[4];
      int64_t fin_time = 0, release_time = 0;
     timing_t start_time, end_time;
 
@@ -164,7 +184,14 @@ void thread_C_code(void *arg1, void *arg2, void *arg3) {
         button3 = gpio_pin_get(gpio0_dev,24); 
         button4 = gpio_pin_get(gpio0_dev,25); 
 
-        // Alterar a RTBD
+        button_val[0] = button1;
+        button_val[1] = button2;
+        button_val[2] = button3;
+        button_val[3] = button4;
+
+        // dar lock aqui
+        setRTDB_state_botao(&RT,button_val);
+        // unlock aqui
         printk("button1:%d, button2:%d, button3:%d, button4:%d \r\n",button1,button2,button3,button4);
 
         fin_time = k_uptime_get();
@@ -178,6 +205,7 @@ void thread_C_code(void *arg1, void *arg2, void *arg3) {
 
 }
 
+// thread que lê o array da RTBD e atualiza o valor dos leds
 void thread_D_code(void *arg1, void *arg2, void *arg3) {
      int64_t fin_time = 0, release_time = 0;
     timing_t start_time, end_time;
@@ -189,12 +217,15 @@ void thread_D_code(void *arg1, void *arg2, void *arg3) {
     while (1) {
         start_time = timing_counter_get();
 
-        //Aceder à RTBD 
-        gpio_pin_set(gpio0_dev, 13,0);
-        gpio_pin_set(gpio0_dev, 14,1);
-        /* gpio_pin_toggle(gpio0_dev, 14); */
-        gpio_pin_toggle(gpio0_dev, 15);
-        gpio_pin_toggle(gpio0_dev, 16);
+        // lock 
+        int led_vals[4];
+         //led_vals =  *getRTDB_state_led(&RT);
+         memcpy(&led_vals,getRTDB_state_led(&RT),4);
+        // unlock aqui
+        gpio_pin_set(gpio0_dev, 13,led_vals[0]);
+        gpio_pin_set(gpio0_dev, 14,led_vals[1]);
+        gpio_pin_set(gpio0_dev, 15,led_vals[2]);
+        gpio_pin_set(gpio0_dev, 16,led_vals[3]);
         
 
         fin_time = k_uptime_get();
@@ -209,6 +240,38 @@ void thread_D_code(void *arg1, void *arg2, void *arg3) {
 }
 
 
+// esta thread concatena os carateres do fifo e coloca-os sem processamento no RTBD
+void thread_E_code(void *arg1, void *arg2, void *arg3) {
+    int64_t fin_time = 0, release_time = 0;
+    timing_t start_time, end_time;
+
+    printk("Thread A init (periodic)\n");
+
+    /* release_time = k_uptime_get() + thread_E_period;
+    node *tmp_curr = q1->head;
+     */
+
+    while (1) {
+        start_time = timing_counter_get();
+        
+        /* for(int i = 0; i < MyFifoSize(&q1); i++){
+
+            
+        }
+ */
+
+        fin_time = k_uptime_get();
+        if (fin_time < release_time) {
+            k_msleep(release_time - fin_time);
+            release_time += thread_E_period;
+        }
+    }
+
+    timing_stop();
+}
+
+// outra thread processa os comandos dentro da RTBD
+// adcionar os locks e os unlocks
 
 void main(void) {
     config_pins();
@@ -228,6 +291,9 @@ void main(void) {
                                    thread_C_prio, 0, K_NO_WAIT);
     thread_D_tid = k_thread_create(&thread_D_data, thread_D_stack, STACK_SIZE,
                                    thread_D_code, NULL, NULL, NULL,
+                                   thread_D_prio, 0, K_NO_WAIT);
+    thread_E_tid = k_thread_create(&thread_E_data, thread_E_stack, STACK_SIZE,
+                                   thread_E_code, NULL, NULL, NULL,
                                    thread_D_prio, 0, K_NO_WAIT);
 }
 
