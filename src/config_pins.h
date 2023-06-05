@@ -8,6 +8,9 @@
 #define CONFIG_PINS_H
 
 #include <stdint.h>
+#define GPIO0_NODE DT_NODELABEL(gpio0)
+static const struct device *gpio0_dev = DEVICE_DT_GET(GPIO0_NODE);
+
 
 extern const uint8_t buttons_pins[];
 extern const uint8_t led_pins[];

@@ -6,8 +6,8 @@
 
 #include "config_pins.h"
 
-#define GPIO0_NODE DT_NODELABEL(gpio0)
-static const struct device *gpio0_dev = DEVICE_DT_GET(GPIO0_NODE);
+/* #define GPIO0_NODE DT_NODELABEL(gpio0)
+static const struct device *gpio0_dev = DEVICE_DT_GET(GPIO0_NODE); */
 
 const uint8_t buttons_pins[] = {11, 12, 24, 25};
 const uint8_t led_pins[] = {13, 14, 15, 16};

@@ -13,7 +13,7 @@
 
 void config_i2c(){
 		uint8_t ret;
-		printk("Hello World! %s\n", CONFIG_BOARD);
+		//printk("Hello World! %s\n", CONFIG_BOARD);
 		if (!device_is_ready(dev_i2c.bus)) {
 			printk("I2C bus %s is not ready!\n\r",dev_i2c.bus->name);
 			return;
@@ -52,7 +52,7 @@ void config_i2c(){
 			}
 			
 		}
-		printk("The data obtained is %u\r\n",data);
+		//printk("The data obtained is %u\r\n",data);
 		printk("The temperature obtained is %u\r\n",temp);
 		//k_msleep(SLEEP_TIME_MS);
 

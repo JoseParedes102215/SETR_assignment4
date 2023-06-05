@@ -1,9 +1,10 @@
-#include <zephyr/kernel.h>          /* for k_msleep() */
-#include <zephyr/device.h>          /* for device_is_ready() and device structure */
-#include <zephyr/devicetree.h>      /* for DT_NODELABEL() */
-#include <zephyr/drivers/gpio.h>    /* for GPIO api*/
-#include <zephyr/sys/printk.h>      /* for printk()*/
+#include <zephyr/kernel.h>
+#include <zephyr/device.h>
+#include <zephyr/devicetree.h>
+#include <zephyr/drivers/gpio.h>
+#include <zephyr/sys/printk.h>
 #include <drivers/uart.h>
+#include <zephyr/timing/timing.h>
 
 #include "config_pins.h"
 #include "fifo.h"
@@ -11,128 +12,227 @@
 
 #include <zephyr/drivers/i2c.h>
 
-#define MAIN_SLEEP_TIME_MS 2000 /* Time between main() activations */ 
+#define MAIN_SLEEP_TIME_MS 2000
+#define FATAL_ERR -1
 
-#define FATAL_ERR -1 /* Fatal error return code, app terminates */
+#define UART_NODE DT_NODELABEL(uart0)
 
-#define UART_NODE DT_NODELABEL(uart0)    /* UART Node label, see dts */
+#define RXBUF_SIZE 60
+#define TXBUF_SIZE 60
+#define RX_TIMEOUT 100
 
-#define RXBUF_SIZE 60                   /* RX buffer size */
-#define TXBUF_SIZE 60                   /* TX buffer size */
-#define RX_TIMEOUT 100                  /* Inactivity period after the instant when last char was received that triggers an rx event (in us) */
-
-
-/* Struct for UART configuration (if using default values is not needed) */
 const struct uart_config uart_cfg = {
-		.baudrate = 115200,
-		.parity = UART_CFG_PARITY_NONE,
-		.stop_bits = UART_CFG_STOP_BITS_1,
-		.data_bits = UART_CFG_DATA_BITS_8,
-		.flow_ctrl = UART_CFG_FLOW_CTRL_NONE
+    .baudrate = 115200,
+    .parity = UART_CFG_PARITY_NONE,
+    .stop_bits = UART_CFG_STOP_BITS_1,
+    .data_bits = UART_CFG_DATA_BITS_8,
+    .flow_ctrl = UART_CFG_FLOW_CTRL_NONE
 };
 
-/* UAR related variables */
-const struct device *uart_dev;          /* Pointer to device struct */ 
-static uint8_t rx_buf[RXBUF_SIZE];      /* RX buffer, to store received data */
-static uint8_t rx_chars[RXBUF_SIZE];    /* chars actually received  */
-volatile int uart_rxbuf_nchar=0;        /* Number of chars currnetly on the rx buffer */
+const struct device *uart_dev;
+static uint8_t rx_buf[RXBUF_SIZE];
+static uint8_t rx_chars[RXBUF_SIZE];
+volatile int uart_rxbuf_nchar = 0;
 
-/* UART callback function prototype */
 static void uart_cb(const struct device *dev, struct uart_event *evt, void *user_data);
 
-void init_uart(){
-    int err=0; /* Generic error variable */
-        
-        /* Bind to UART */
-        uart_dev= device_get_binding(DT_LABEL(UART_NODE));
-        if (uart_dev == NULL) {
-            printk("device_get_binding() error for device %s!\n\r", DT_LABEL(UART_NODE));
-            return;
-        }
-        else {
-            printk("UART binding successful\n\r");
-        }
+void init_uart() {
+    int err = 0;
 
-        /* Configure UART */
-        err = uart_configure(uart_dev, &uart_cfg);
-        if (err == -ENOSYS) { /* If invalid configuration */
-            printk("uart_configure() error. Invalid configuration\n\r");
-            return; 
-        }
-
-        /* Register callback */
-        err = uart_callback_set(uart_dev, uart_cb, NULL);
-        if (err) {
-            printk("uart_callback_set() error. Error code:%d\n\r",err);
-            return;
-        }
-            
-        /* Enable data reception */
-        err =  uart_rx_enable(uart_dev ,rx_buf,sizeof(rx_buf),RX_TIMEOUT);
-        if (err) {
-            printk("uart_rx_enable() error. Error code:%d\n\r",err);
-            return;
-        }
-}
-
-void main(void)
-{   
-
-    //config_pins();
-    init_uart();
-    queue q1;
-    MyFifoInit(&q1,QUEUE_MAX_SIZE);
-
-    while(1){
-
-        if(uart_rxbuf_nchar > 0) {
-            rx_chars[uart_rxbuf_nchar] = 0; /* Terminate the string */
-            uart_rxbuf_nchar = 0;           /* Reset counter */
-            MyFifoInsert(&q1,rx_chars,1);
-        }
-        if(*MyFifoPeep(&q1) != 224){
-            //printk(" valor do MyPeep %d\n",*MyFifoPeep(&q1));
-            printk("O valor lido do teclado e: %s ", MyFifoPeep(&q1));
-            MyFifoRemove(&q1);
-           
-        }
-        config_i2c();
-        k_msleep(MAIN_SLEEP_TIME_MS);
+    uart_dev = device_get_binding(DT_LABEL(UART_NODE));
+    if (uart_dev == NULL) {
+        printk("device_get_binding() error for device %s!\n\r", DT_LABEL(UART_NODE));
+        return;
+    } else {
+        printk("UART binding successful\n\r");
     }
 
+    err = uart_configure(uart_dev, &uart_cfg);
+    if (err == -ENOSYS) {
+        printk("uart_configure() error. Invalid configuration\n\r");
+        return;
+    }
 
+    err = uart_callback_set(uart_dev, uart_cb, NULL);
+    if (err) {
+        printk("uart_callback_set() error. Error code:%d\n\r", err);
+        return;
+    }
 
+    err = uart_rx_enable(uart_dev, rx_buf, sizeof(rx_buf), RX_TIMEOUT);
+    if (err) {
+        printk("uart_rx_enable() error. Error code:%d\n\r", err);
+        return;
+    }
+}
 
+#define STACK_SIZE 1024
 
+#define thread_A_prio 1
+#define thread_B_prio 1
+#define thread_C_prio 1
+#define thread_D_prio 1
 
+#define thread_A_period 1000
+#define thread_B_period 2000
+#define thread_C_period 3000
+#define thread_D_period 3000
 
+K_THREAD_STACK_DEFINE(thread_A_stack, STACK_SIZE);
+K_THREAD_STACK_DEFINE(thread_B_stack, STACK_SIZE);
+K_THREAD_STACK_DEFINE(thread_C_stack, STACK_SIZE);
+K_THREAD_STACK_DEFINE(thread_D_stack, STACK_SIZE);
 
+struct k_thread thread_A_data;
+struct k_thread thread_B_data;
+struct k_thread thread_C_data;
+struct k_thread thread_D_data;
 
-/* 
-    char exemplo[32] = "ola";
-    char exemplo2[32] = "xau";
+k_tid_t thread_A_tid;
+k_tid_t thread_B_tid;
+k_tid_t thread_C_tid;
+k_tid_t thread_D_tid;
 
- */
+queue q1;
 
-   /*  MyFifoInsert(&q1,exemplo,1);
-    MyFifoInsert(&q1,exemplo2,1);
+void thread_A_code(void *arg1, void *arg2, void *arg3) {
+    int64_t fin_time = 0, release_time = 0;
+    timing_t start_time, end_time;
 
-    printk("O valor retornado e %s",MyFifoPeep(&q1));
-    
-    k_msleep(MAIN_SLEEP_TIME_MS);
-    MyFifoRemove(&q1);
+    printk("Thread A init (periodic)\n");
 
-    printk("O valor retornado e %s",MyFifoPeep(&q1));
- */
+    release_time = k_uptime_get() + thread_A_period;
 
+    while (1) {
+        start_time = timing_counter_get();
+        if (uart_rxbuf_nchar > 0) {
+            rx_chars[uart_rxbuf_nchar] = 0;
+            uart_rxbuf_nchar = 0;
+            MyFifoInsert(&q1, rx_chars, 1);
+        }
+        if (*MyFifoPeep(&q1) != 224) {
+            printk("O valor lido do teclado e: %s ", MyFifoPeep(&q1));
+            // colocar os comandos na RTBD
+            MyFifoRemove(&q1);
+        }
 
+        fin_time = k_uptime_get();
+        if (fin_time < release_time) {
+            k_msleep(release_time - fin_time);
+            release_time += thread_A_period;
+        }
+    }
+
+    timing_stop();
+}
+
+void thread_B_code(void *arg1, void *arg2, void *arg3) {
+    int64_t fin_time = 0, release_time = 0;
+    timing_t start_time, end_time;
+
+    printk("Thread B init (periodic)\n");
+
+    release_time = k_uptime_get() + thread_B_period;
+
+    while (1) {
+        start_time = timing_counter_get();
+        config_i2c();
+        // Alterar a RTBD
+        fin_time = k_uptime_get();
+        if (fin_time < release_time) {
+            k_msleep(release_time - fin_time);
+            release_time += thread_B_period;
+        }
+    }
+
+    timing_stop();
+    }
+
+void thread_C_code(void *arg1, void *arg2, void *arg3) {
+    int button1,button2,button3,button4;
+     int64_t fin_time = 0, release_time = 0;
+    timing_t start_time, end_time;
+
+    printk("Thread C init (periodic)\n");
+
+    release_time = k_uptime_get() + thread_C_period;
+
+    while (1) {
+        start_time = timing_counter_get();
+        button1 = gpio_pin_get(gpio0_dev,11); 
+        button2 = gpio_pin_get(gpio0_dev,12); 
+        button3 = gpio_pin_get(gpio0_dev,24); 
+        button4 = gpio_pin_get(gpio0_dev,25); 
+
+        // Alterar a RTBD
+        printk("button1:%d, button2:%d, button3:%d, button4:%d \r\n",button1,button2,button3,button4);
+
+        fin_time = k_uptime_get();
+        if (fin_time < release_time) {
+            k_msleep(release_time - fin_time);
+            release_time += thread_B_period;
+        }
+    }
+
+    timing_stop();
 
 }
 
-/* UART callback implementation */
-/* Note that callback functions are executed in the scope of interrupt handlers. */
-/* They run asynchronously after hardware/software interrupts and have a higher priority than all threads */
-/* Should be kept as short and simple as possible. Heavier processing should be deferred to a task with suitable priority*/
+void thread_D_code(void *arg1, void *arg2, void *arg3) {
+     int64_t fin_time = 0, release_time = 0;
+    timing_t start_time, end_time;
+
+    printk("Thread C init (periodic)\n");
+
+    release_time = k_uptime_get() + thread_C_period;
+
+    while (1) {
+        start_time = timing_counter_get();
+
+        //Aceder à RTBD 
+        gpio_pin_set(gpio0_dev, 13,0);
+        gpio_pin_set(gpio0_dev, 14,1);
+        /* gpio_pin_toggle(gpio0_dev, 14); */
+        gpio_pin_toggle(gpio0_dev, 15);
+        gpio_pin_toggle(gpio0_dev, 16);
+        
+
+        fin_time = k_uptime_get();
+        if (fin_time < release_time) {
+            k_msleep(release_time - fin_time);
+            release_time += thread_B_period;
+        }
+    }
+
+    timing_stop();
+
+}
+
+
+
+void main(void) {
+    config_pins();
+    init_uart();
+    MyFifoInit(&q1, QUEUE_MAX_SIZE);
+
+    thread_A_tid = k_thread_create(&thread_A_data, thread_A_stack, STACK_SIZE,
+                                   thread_A_code, NULL, NULL, NULL,
+                                   thread_A_prio, 0, K_NO_WAIT);
+
+    thread_B_tid = k_thread_create(&thread_B_data, thread_B_stack, STACK_SIZE,
+                                   thread_B_code, NULL, NULL, NULL,
+                                   thread_B_prio, 0, K_NO_WAIT);
+
+    thread_C_tid = k_thread_create(&thread_C_data, thread_C_stack, STACK_SIZE,
+                                   thread_C_code, NULL, NULL, NULL,
+                                   thread_C_prio, 0, K_NO_WAIT);
+    thread_D_tid = k_thread_create(&thread_D_data, thread_D_stack, STACK_SIZE,
+                                   thread_D_code, NULL, NULL, NULL,
+                                   thread_D_prio, 0, K_NO_WAIT);
+}
+
+
+
 static void uart_cb(const struct device *dev, struct uart_event *evt, void *user_data)
 {
     int err;
