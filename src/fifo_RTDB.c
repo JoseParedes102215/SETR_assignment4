@@ -37,11 +37,11 @@ int setRTDB_chars(RTDB *_RTDB, char* new_chars){
     return 0;
 }
 
-
-
-
  int setRTDB_state_led(RTDB *_RTDB, int* new_states){
-    memcpy(&_RTDB->state_led,&new_states,sizeof(new_states));
+    for (int i = 0 ; i < 4; i++){
+        _RTDB->state_led[i]=new_states[i];
+    }
+    //memcpy(&_RTDB->state_led,&new_states,sizeof(new_states));
     return 0;
 }
 

@@ -22,6 +22,8 @@
 #define TXBUF_SIZE 60
 #define RX_TIMEOUT 100
 
+K_MUTEX_DEFINE(mx);
+
 const struct uart_config uart_cfg = {
     .baudrate = 115200,
     .parity = UART_CFG_PARITY_NONE,
@@ -124,8 +126,8 @@ void thread_A_code(void *arg1, void *arg2, void *arg3) {
             uart_rxbuf_nchar = 0;
             MyFifoInsert(&q1, rx_chars, 1);
         }
-        if (*MyFifoPeep(&q1) != 224) {
-            printk("O valor lido do teclado e: %s ", MyFifoPeep(&q1));
+        if (MyFifoPeep(&q1) != NULL) {
+            printk("O valor lido do teclado e: %s ",MyFifoPeep(&q1));
             // colocar os comandos na RTBD
             MyFifoRemove(&q1);
         }
@@ -153,9 +155,11 @@ void thread_B_code(void *arg1, void *arg2, void *arg3) {
         start_time = timing_counter_get();
         int t = get_temp();
         // dar lock aqui
+        k_mutex_lock(&mx,K_FOREVER);
         setRTDB_temp(&RT,t);
+        printk("Temp= %d\n",getRTDB_temp(&RT));
         // unlock aqui
-        printk("temp=%d\n",t);
+        k_mutex_unlock(&mx);
         fin_time = k_uptime_get();
         if (fin_time < release_time) {
             k_msleep(release_time - fin_time);
@@ -192,7 +196,7 @@ void thread_C_code(void *arg1, void *arg2, void *arg3) {
         // dar lock aqui
         setRTDB_state_botao(&RT,button_val);
         // unlock aqui
-        printk("button1:%d, button2:%d, button3:%d, button4:%d \r\n",button1,button2,button3,button4);
+        printk("button1: %d, button2: %d, button3: %d, button4: %d \r\n",button1,button2,button3,button4);
 
         fin_time = k_uptime_get();
         if (fin_time < release_time) {
@@ -218,14 +222,18 @@ void thread_D_code(void *arg1, void *arg2, void *arg3) {
         start_time = timing_counter_get();
 
         // lock 
-        int led_vals[4];
+        int led_vals[4]={0,1,1,1};
          //led_vals =  *getRTDB_state_led(&RT);
-         memcpy(&led_vals,getRTDB_state_led(&RT),4);
+         setRTDB_state_led(&RT,led_vals);
+         int *dummy = getRTDB_state_led(&RT);
+         
+         //memcpy(&led_vals,&dummy,4);
         // unlock aqui
-        gpio_pin_set(gpio0_dev, 13,led_vals[0]);
-        gpio_pin_set(gpio0_dev, 14,led_vals[1]);
-        gpio_pin_set(gpio0_dev, 15,led_vals[2]);
-        gpio_pin_set(gpio0_dev, 16,led_vals[3]);
+        gpio_pin_set(gpio0_dev, 13,dummy[0]);
+        gpio_pin_set(gpio0_dev, 14,dummy[1]);
+        gpio_pin_set(gpio0_dev, 15,dummy[2]);
+        gpio_pin_set(gpio0_dev, 16,dummy[3]);
+        printk("led_states = %d %d %d %d\n\r",dummy[0],dummy[1],dummy[2],dummy[3]);
         
 
         fin_time = k_uptime_get();
@@ -292,9 +300,9 @@ void main(void) {
     thread_D_tid = k_thread_create(&thread_D_data, thread_D_stack, STACK_SIZE,
                                    thread_D_code, NULL, NULL, NULL,
                                    thread_D_prio, 0, K_NO_WAIT);
-    thread_E_tid = k_thread_create(&thread_E_data, thread_E_stack, STACK_SIZE,
+    /*thread_E_tid = k_thread_create(&thread_E_data, thread_E_stack, STACK_SIZE,
                                    thread_E_code, NULL, NULL, NULL,
-                                   thread_D_prio, 0, K_NO_WAIT);
+                                   thread_D_prio, 0, K_NO_WAIT);*/
 }
 
 
