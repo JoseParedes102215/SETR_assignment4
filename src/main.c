@@ -77,7 +77,7 @@ void init_uart() {
 #define thread_D_prio 1
 #define thread_E_prio 1
 
-#define thread_A_period 1000
+#define thread_A_period 250
 #define thread_B_period 2000
 #define thread_C_period 3000
 #define thread_D_period 3000
@@ -126,8 +126,13 @@ void thread_A_code(void *arg1, void *arg2, void *arg3) {
             uart_rxbuf_nchar = 0;
             MyFifoInsert(&q1, rx_chars, 1);
         }
+        char * RT_arr = getRTDB_chars(&RT);
+        
         if (MyFifoPeep(&q1) != NULL) {
-            printk("O valor lido do teclado e: %s ",MyFifoPeep(&q1));
+            strcat(&RT_arr,MyFifoPeep(&q1));
+            setRTDB_chars(&RT,RT_arr);
+            
+            printk("O valor lido do teclado e: %s \n",MyFifoPeep(&q1));
             // colocar os comandos na RTBD
             MyFifoRemove(&q1);
         }
@@ -194,8 +199,10 @@ void thread_C_code(void *arg1, void *arg2, void *arg3) {
         button_val[3] = button4;
 
         // dar lock aqui
+        k_mutex_lock(&mx,K_FOREVER);
         setRTDB_state_botao(&RT,button_val);
         // unlock aqui
+        k_mutex_unlock(&mx);
         printk("button1: %d, button2: %d, button3: %d, button4: %d \r\n",button1,button2,button3,button4);
 
         fin_time = k_uptime_get();
@@ -222,12 +229,15 @@ void thread_D_code(void *arg1, void *arg2, void *arg3) {
         start_time = timing_counter_get();
 
         // lock 
+        k_mutex_lock(&mx,K_FOREVER);
+        
         int led_vals[4]={0,1,1,1};
          //led_vals =  *getRTDB_state_led(&RT);
          setRTDB_state_led(&RT,led_vals);
          int *dummy = getRTDB_state_led(&RT);
          
          //memcpy(&led_vals,&dummy,4);
+         k_mutex_unlock(&mx);
         // unlock aqui
         gpio_pin_set(gpio0_dev, 13,dummy[0]);
         gpio_pin_set(gpio0_dev, 14,dummy[1]);
@@ -262,12 +272,16 @@ void thread_E_code(void *arg1, void *arg2, void *arg3) {
     while (1) {
         start_time = timing_counter_get();
         
-        /* for(int i = 0; i < MyFifoSize(&q1); i++){
+        /*char * RT_arr = getRTDB_chars(&RT);
+        printk("rtdb: %s\n",RT_arr);
+        node *curr = q1.head;
 
-            
+        while (curr != NULL){
+            strcat(&RT_arr,&curr->value);
+            curr = curr->next;
+            MyFifoRemove(&q1);
         }
- */
-
+        printk("%s\n",RT_arr);*/
         fin_time = k_uptime_get();
         if (fin_time < release_time) {
             k_msleep(release_time - fin_time);
